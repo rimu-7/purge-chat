@@ -10,7 +10,13 @@ export async function GET(
   try {
     const { id: roomId } = await params;
     const msgs = await getRoomMessages(roomId);
-    return NextResponse.json(msgs);
+    return NextResponse.json(msgs, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
+    });
   } catch (error) {
     console.error("Failed to fetch messages:", error);
     const message = error instanceof Error ? error.message : "Internal Server Error";

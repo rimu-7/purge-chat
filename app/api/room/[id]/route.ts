@@ -13,7 +13,13 @@ export async function GET(
     if (!room) {
       return NextResponse.json({ error: "Room expired or not found" }, { status: 404 });
     }
-    return NextResponse.json(room);
+    return NextResponse.json(room, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
+    });
   } catch (error) {
     console.error("Failed to fetch room:", error);
     const message = error instanceof Error ? error.message : "Internal Server Error";

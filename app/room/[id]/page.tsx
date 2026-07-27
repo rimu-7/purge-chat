@@ -185,11 +185,15 @@ export default function RoomPage({
 
     async function initRoom() {
       try {
-        const { data: roomData } = await axios.get(`/api/room/${roomId}`)
+        const { data: roomData } = await axios.get(
+          `/api/room/${roomId}?t=${Date.now()}`,
+          { headers: { "Cache-Control": "no-cache, no-store" } }
+        )
         if (isMounted) setRoom(roomData)
 
         const { data: msgData } = await axios.get(
-          `/api/room/${roomId}/messages`
+          `/api/room/${roomId}/messages?t=${Date.now()}`,
+          { headers: { "Cache-Control": "no-cache, no-store" } }
         )
         if (isMounted) setMessages(deduplicateMessages(msgData))
 
@@ -218,25 +222,17 @@ export default function RoomPage({
     senderNameRef.current = senderName
   }, [senderName])
 
-  // Real-time Socket.io Connection (Triggered after Join Confirmation)
+  // Real-time Socket.io & Polling Fallback Handler
   useEffect(() => {
     if (!roomId || !hasJoinedRoom) return
 
-    const socket = io(
-      process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin,
-      {
-        autoConnect: true,
-        transports: ["websocket", "polling"],
-        timeout: 3000,
-      }
-    )
-
-    socketRef.current = socket
-
     const refreshMessages = async () => {
       try {
-        const { data } = await axios.get(`/api/room/${roomId}/messages`)
-        setMessages(deduplicateMessages(data as MessageItem[]))
+        const { data } = await axios.get(
+          `/api/room/${roomId}/messages?t=${Date.now()}`,
+          { headers: { "Cache-Control": "no-cache, no-store" } }
+        )
+        setMessages((prev) => deduplicateMessages(data as MessageItem[]))
       } catch (err) {
         console.error("Failed to refresh room messages:", err)
       }
@@ -244,44 +240,60 @@ export default function RoomPage({
 
     const startPolling = () => {
       stopPolling()
+      void refreshMessages()
       pollingIntervalRef.current = window.setInterval(() => {
         void refreshMessages()
-      }, 2500)
+      }, 1500)
     }
 
-    socket.on("connect", () => {
-      stopPolling()
-    })
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL
+    let socket: Socket | null = null
 
-    socket.on("connect_error", () => {
-      startPolling()
-    })
+    if (socketUrl) {
+      socket = io(socketUrl, {
+        autoConnect: true,
+        transports: ["websocket", "polling"],
+        timeout: 3000,
+      })
+      socketRef.current = socket
 
-    socket.on("connect_failed", () => {
-      startPolling()
-    })
+      socket.on("connect", () => {
+        stopPolling()
+      })
 
-    socket.emit("join-room", { roomId, senderName: senderNameRef.current })
+      socket.on("connect_error", () => {
+        startPolling()
+      })
 
-    socket.on("message-received", (msg: MessageItem) => {
-      setMessages((prev) => deduplicateMessages([...prev, msg]))
-    })
+      socket.on("connect_failed", () => {
+        startPolling()
+      })
 
-    socket.on("backup-status-updated", () => {
-      setRoom((prev) => (prev ? { ...prev, isBackedUp: true } : prev))
-    })
+      socket.emit("join-room", { roomId, senderName: senderNameRef.current })
 
-    socket.on("room-destroyed", () => {
-      setIsExpired(true)
-      stopPolling()
-    })
+      socket.on("message-received", (msg: MessageItem) => {
+        setMessages((prev) => deduplicateMessages([...prev, msg]))
+      })
 
-    if (!socket.connected) {
+      socket.on("backup-status-updated", () => {
+        setRoom((prev) => (prev ? { ...prev, isBackedUp: true } : prev))
+      })
+
+      socket.on("room-destroyed", () => {
+        setIsExpired(true)
+        stopPolling()
+      })
+
+      if (!socket.connected) {
+        startPolling()
+      }
+    } else {
+      // In serverless environments (Vercel) without a socket host, start fast HTTP polling immediately
       startPolling()
     }
 
     return () => {
-      socket.disconnect()
+      if (socket) socket.disconnect()
       stopPolling()
     }
   }, [roomId, hasJoinedRoom])
