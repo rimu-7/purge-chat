@@ -86,6 +86,26 @@ pnpm db:push
 3. If the room reaches its expiration time and is not backed up, it is purged.
 4. If the owner creates a backup, the room can remain active for the current session while preserving an encrypted snapshot for later restore.
 
+## Netlify deployment notes
+
+This project is now set up to build as a Next.js application, but the chat features still depend on external services for persistence and realtime behavior:
+
+- MySQL database via DATABASE_URL
+- Upstash Redis via UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+- A Socket.IO-compatible host if you want full realtime messaging beyond the fallback polling behavior
+
+For Netlify, configure the environment variables in the site dashboard under Site settings → Environment variables.
+
+Recommended deployment flow:
+
+1. Connect the repository to Netlify.
+2. Set the build command to pnpm build.
+3. Set the publish directory to .next.
+4. Add the required environment variables.
+5. Deploy.
+
+If you want the realtime experience to be fully hosted outside Netlify, point NEXT_PUBLIC_SOCKET_URL to your own Socket.IO server.
+
 ## Notes on security
 
 The backup flow uses client-side encryption before the data is sent to the server. The server stores the encrypted payload, but it does not have the secret key needed to decrypt it. That means the restoration process depends on the user retaining the backup key.

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { runVanishPurgeSweep } from "@/lib/vanish";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const result = await runVanishPurgeSweep();
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Purge sweep failed:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

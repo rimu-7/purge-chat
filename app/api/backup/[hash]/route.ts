@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getEncryptedBackup } from "@/lib/vanish";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ hash: string }> }
@@ -14,6 +16,7 @@ export async function GET(
     return NextResponse.json(backup);
   } catch (error) {
     console.error("Failed to fetch backup:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

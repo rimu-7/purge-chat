@@ -1,32 +1,16 @@
 "use client"
 
-import { useEffect, useState, useRef, use } from "react"
-import { useRouter } from "next/navigation"
-import { io, Socket } from "socket.io-client"
-import axios from "axios"
-import toast from "react-hot-toast"
-import {
-  Shield,
-  ShieldCheck,
-  Clock,
-  Lock,
-  Copy,
-  Check,
-  Send,
-  Trash2,
-  Download,
-  Menu,
-  AlertTriangle,
-  ArrowLeft,
-  Users,
-  Terminal,
-  Crown,
-  LogOut,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
   Sheet,
   SheetContent,
@@ -34,16 +18,32 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
-import { BubbleGroup, Bubble, BubbleContent } from "@/components/ui/bubble"
-import { generateAnonymousName, generateId } from "@/lib/identity"
+import { Textarea } from "@/components/ui/textarea"
 import { encryptPayload } from "@/lib/crypto"
+import { generateAnonymousName, generateId } from "@/lib/identity"
+import axios from "axios"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  Clock,
+  Copy,
+  Crown,
+  Download,
+  Lock,
+  LogOut,
+  Menu,
+  Send,
+  Shield,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  Users,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { use, useEffect, useRef, useState } from "react"
+import toast from "react-hot-toast"
+import { io, Socket } from "socket.io-client"
 
 interface MessageItem {
   id: string
@@ -76,7 +76,10 @@ function deduplicateMessages(msgs: MessageItem[]): MessageItem[] {
     if (seen.has(m.id)) continue
 
     // Drop temporary optimistic message if real message with same content and sender exists
-    if (m.id.startsWith("temp-") && realUserContents.has(`${m.senderId}_${m.content}`)) {
+    if (
+      m.id.startsWith("temp-") &&
+      realUserContents.has(`${m.senderId}_${m.content}`)
+    ) {
       continue
     }
 
@@ -109,7 +112,8 @@ export default function RoomPage({
     if (typeof window === "undefined") return ""
     let sname = sessionStorage.getItem(`vanish_sender_name_${roomId}`)
     if (!sname) {
-      sname = localStorage.getItem("vanish_sender_name") || generateAnonymousName()
+      sname =
+        localStorage.getItem("vanish_sender_name") || generateAnonymousName()
       sessionStorage.setItem(`vanish_sender_name_${roomId}`, sname)
     }
     return sname
@@ -162,7 +166,7 @@ export default function RoomPage({
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<Socket | null>(null)
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<number | null>(null)
 
   const stopPolling = () => {
     if (pollingIntervalRef.current) {
@@ -218,14 +222,44 @@ export default function RoomPage({
   useEffect(() => {
     if (!roomId || !hasJoinedRoom) return
 
-    // Initialize Socket.io connection if server is running Socket.io
-    const socket = io({
-      autoConnect: true,
-      transports: ["websocket", "polling"],
-      timeout: 3000,
-    })
+    const socket = io(
+      process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin,
+      {
+        autoConnect: true,
+        transports: ["websocket", "polling"],
+        timeout: 3000,
+      }
+    )
 
     socketRef.current = socket
+
+    const refreshMessages = async () => {
+      try {
+        const { data } = await axios.get(`/api/room/${roomId}/messages`)
+        setMessages(deduplicateMessages(data as MessageItem[]))
+      } catch (err) {
+        console.error("Failed to refresh room messages:", err)
+      }
+    }
+
+    const startPolling = () => {
+      stopPolling()
+      pollingIntervalRef.current = window.setInterval(() => {
+        void refreshMessages()
+      }, 2500)
+    }
+
+    socket.on("connect", () => {
+      stopPolling()
+    })
+
+    socket.on("connect_error", () => {
+      startPolling()
+    })
+
+    socket.on("connect_failed", () => {
+      startPolling()
+    })
 
     socket.emit("join-room", { roomId, senderName: senderNameRef.current })
 
@@ -241,6 +275,10 @@ export default function RoomPage({
       setIsExpired(true)
       stopPolling()
     })
+
+    if (!socket.connected) {
+      startPolling()
+    }
 
     return () => {
       socket.disconnect()
@@ -580,7 +618,6 @@ export default function RoomPage({
                     className="bg-background text-xs font-bold"
                   />
                 </div>
-                
 
                 {isOwner && (
                   <div>
@@ -1031,13 +1068,15 @@ export default function RoomPage({
 
       {/* Join Room Confirmation Dialog */}
       <Dialog open={!hasJoinedRoom && !isExpired && !!room}>
-        <DialogContent className="max-w-md border-primary/50 bg-card font-mono text-foreground glow-box [&>button]:hidden">
+        <DialogContent className="glow-box max-w-md border-primary/50 bg-card font-mono text-foreground [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base text-primary glow-text">
+            <DialogTitle className="glow-text flex items-center gap-2 text-base text-primary">
               <Users className="h-5 w-5" /> JOIN SECRET CHAT ROOM
             </DialogTitle>
             <DialogDescription className="text-xs">
-              You are entering encrypted room <span className="font-bold text-primary">{roomId}</span>. Please confirm your display alias to join the live session.
+              You are entering encrypted room{" "}
+              <span className="font-bold text-primary">{roomId}</span>. Please
+              confirm your display alias to join the live session.
             </DialogDescription>
           </DialogHeader>
 
@@ -1051,7 +1090,10 @@ export default function RoomPage({
                 onChange={(e) => {
                   const newName = e.target.value
                   setSenderName(newName)
-                  sessionStorage.setItem(`vanish_sender_name_${roomId}`, newName)
+                  sessionStorage.setItem(
+                    `vanish_sender_name_${roomId}`,
+                    newName
+                  )
                   localStorage.setItem("vanish_sender_name", newName)
                 }}
                 className="bg-background font-mono text-xs font-bold text-primary"
@@ -1062,12 +1104,16 @@ export default function RoomPage({
             <div className="space-y-1 rounded border border-border bg-background/60 p-3 text-[11px] text-muted-foreground">
               <div className="flex justify-between">
                 <span>Session Security:</span>
-                <span className="font-mono text-foreground">Zero-Knowledge AES-256</span>
+                <span className="font-mono text-foreground">
+                  Zero-Knowledge AES-256
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Room Role:</span>
                 <span className="font-bold text-primary">
-                  {room && senderId && room.ownerId === senderId ? "Owner (Creator)" : "Invited Participant"}
+                  {room && senderId && room.ownerId === senderId
+                    ? "Owner (Creator)"
+                    : "Invited Participant"}
                 </span>
               </div>
             </div>
@@ -1075,9 +1121,10 @@ export default function RoomPage({
             <Button
               onClick={handleConfirmJoin}
               disabled={isJoining || !senderName.trim()}
-              className="h-10 w-full cursor-pointer gap-2 bg-primary text-xs font-bold text-primary-foreground hover:bg-primary/90 glow-box"
+              className="glow-box h-10 w-full cursor-pointer gap-2 bg-primary text-xs font-bold text-primary-foreground hover:bg-primary/90"
             >
-              <Send className="h-4 w-4" /> {isJoining ? "CONNECTING..." : "JOIN CHAT ROOM NOW"}
+              <Send className="h-4 w-4" />{" "}
+              {isJoining ? "CONNECTING..." : "JOIN CHAT ROOM NOW"}
             </Button>
           </div>
         </DialogContent>
@@ -1091,7 +1138,9 @@ export default function RoomPage({
               <LogOut className="h-5 w-5" /> Leave Secret Chat Session?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Are you sure you want to leave room <span className="font-bold text-primary">{roomId}</span>? Unbacked messages in this session will vanish upon room expiration.
+              Are you sure you want to leave room{" "}
+              <span className="font-bold text-primary">{roomId}</span>? Unbacked
+              messages in this session will vanish upon room expiration.
             </DialogDescription>
           </DialogHeader>
 
@@ -1108,7 +1157,8 @@ export default function RoomPage({
               disabled={isLeaving}
               className="gap-1 border border-rose-500/50 bg-rose-500/20 text-xs font-bold text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.25)] hover:border-rose-500 hover:bg-rose-500/30 hover:text-rose-200"
             >
-              <LogOut className="h-3.5 w-3.5" /> {isLeaving ? "LEAVING..." : "CONFIRM & LEAVE"}
+              <LogOut className="h-3.5 w-3.5" />{" "}
+              {isLeaving ? "LEAVING..." : "CONFIRM & LEAVE"}
             </Button>
           </div>
         </DialogContent>

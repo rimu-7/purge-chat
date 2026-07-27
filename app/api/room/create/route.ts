@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createRoom } from "@/lib/vanish";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -27,8 +29,9 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Failed to create room:", error);
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: message },
       { status: 500 }
     );
   }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getActiveRoom, purgeRoom } from "@/lib/vanish";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -14,7 +16,8 @@ export async function GET(
     return NextResponse.json(room);
   } catch (error) {
     console.error("Failed to fetch room:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getRoomMessages, postMessage } from "@/lib/vanish";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -11,7 +13,8 @@ export async function GET(
     return NextResponse.json(msgs);
   } catch (error) {
     console.error("Failed to fetch messages:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -35,6 +38,7 @@ export async function POST(
     return NextResponse.json(msg);
   } catch (error) {
     console.error("Failed to post message:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
