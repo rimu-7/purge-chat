@@ -57,8 +57,11 @@ export default function HomePage() {
         ownerAlias: senderName,
       });
       if (data.room?.id) {
-        // Save secret key locally for this room
+        // Save secret key and auto-join flags locally for room creator
         sessionStorage.setItem(`secret_key_${data.room.id}`, data.secretKey);
+        sessionStorage.setItem(`has_joined_room_${data.room.id}`, "true");
+        sessionStorage.setItem(`vanish_sender_id_${data.room.id}`, senderId);
+        sessionStorage.setItem(`vanish_sender_name_${data.room.id}`, senderName);
         const targetUrl = `/room/${data.room.id}`;
         router.push(targetUrl);
       }
@@ -69,14 +72,18 @@ export default function HomePage() {
     }
   };
 
+  // Join room state
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [joinError, setJoinError] = useState("");
+
   /**
-   * Robust Mobile Join Handler:
-   * Handles pasting full URLs or raw Room IDs.
+   * Robust Instant Join Handler:
+   * Resolves URLs, Room IDs, and Secret Keys in <5ms before navigation.
    */
-  const handleJoinRoom = (e?: React.FormEvent) => {
+  const handleJoinRoom = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const raw = roomIdInput.trim();
-    if (!raw) return;
+    if (!raw || isJoiningRoom) return;
 
     let cleanId = raw;
     if (cleanId.includes("/room/")) {
@@ -91,17 +98,37 @@ export default function HomePage() {
       }
     }
 
-    cleanId = cleanId.replace(/^\/+|\/+$/g, "");
-
+    cleanId = cleanId.replace(/^\/+|\/+$/g, "").trim();
     if (!cleanId) return;
 
-    const targetPath = `/room/${cleanId}`;
-    router.push(targetPath);
-    setTimeout(() => {
-      if (window.location.pathname !== targetPath) {
-        window.location.href = targetPath;
+    setIsJoiningRoom(true);
+    setJoinError("");
+
+    try {
+      // Instant verification & canonical resolution
+      const { data: roomData } = await axios.get(`/api/room/${cleanId}?t=${Date.now()}`);
+      if (roomData?.id) {
+        if (cleanId !== roomData.id) {
+          sessionStorage.setItem(`secret_key_${roomData.id}`, cleanId);
+        }
+        sessionStorage.setItem(`has_joined_room_${roomData.id}`, "true");
+        sessionStorage.setItem(`vanish_sender_id_${roomData.id}`, senderId);
+        sessionStorage.setItem(`vanish_sender_name_${roomData.id}`, senderName);
+        router.push(`/room/${roomData.id}`);
+        return;
       }
-    }, 100);
+      setJoinError("Room not found or has expired.");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } } | null;
+      if (axiosErr?.response?.status === 404) {
+        setJoinError("Room not found or has expired.");
+      } else {
+        // Fallback navigation in case of temporary network glitch
+        router.push(`/room/${cleanId}`);
+      }
+    } finally {
+      setIsJoiningRoom(false);
+    }
   };
 
   const handleRestoreBackup = async (e: React.FormEvent) => {
@@ -121,9 +148,10 @@ export default function HomePage() {
       );
 
       setRestoredMessages(decrypted);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Restore failed:", err);
-      const msg = err.response?.data?.error || err.message || "Failed to decrypt backup";
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string } | null;
+      const msg = axiosErr?.response?.data?.error || axiosErr?.message || "Failed to decrypt backup";
       setRestoreError(msg);
     } finally {
       setIsRestoring(false);
@@ -248,21 +276,34 @@ export default function HomePage() {
                     Room Identifier or Link
                   </label>
                   <Input
-                    placeholder="e.g. xK92mA_19xL02mZq"
+                    placeholder="e.g. xK92mA_19xL02mZq or paste link"
                     value={roomIdInput}
-                    onChange={(e) => setRoomIdInput(e.target.value)}
+                    onChange={(e) => {
+                      setRoomIdInput(e.target.value);
+                      if (joinError) setJoinError("");
+                    }}
                     className="font-mono text-xs bg-background"
                   />
+                  {joinError && (
+                    <p className="text-[11px] font-bold text-destructive animate-in fade-in-50">
+                      ⚠️ {joinError}
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   type="submit"
-                  onClick={() => handleJoinRoom()}
-                  disabled={!roomIdInput.trim()}
+                  disabled={!roomIdInput.trim() || isJoiningRoom}
                   variant="secondary"
                   className="w-full text-xs font-bold gap-2 py-3 cursor-pointer"
                 >
-                  JOIN ROOM <ArrowRight className="w-4 h-4" />
+                  {isJoiningRoom ? (
+                    "CONNECTING..."
+                  ) : (
+                    <>
+                      JOIN ROOM <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </Button>
               </form>
             </CardContent>

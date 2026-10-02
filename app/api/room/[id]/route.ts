@@ -13,13 +13,26 @@ export async function GET(
     if (!room) {
       return NextResponse.json({ error: "Room expired or not found" }, { status: 404 });
     }
-    return NextResponse.json(room, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
+    return NextResponse.json(
+      {
+        ...room,
+        expiresAt:
+          room.expiresAt instanceof Date
+            ? room.expiresAt.toISOString()
+            : new Date(room.expiresAt).toISOString(),
+        createdAt:
+          room.createdAt instanceof Date
+            ? room.createdAt.toISOString()
+            : new Date(room.createdAt).toISOString(),
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("Failed to fetch room:", error);
     const message = error instanceof Error ? error.message : "Internal Server Error";

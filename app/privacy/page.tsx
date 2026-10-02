@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Shield, ArrowLeft, Lock, Database, Trash2, EyeOff, Server } from "lucide-react";
+import { Shield, ArrowLeft, Lock, Trash2, EyeOff, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Footer } from "@/components/footer";

@@ -4,6 +4,7 @@ import { mysqlTable, varchar, text, timestamp, boolean } from "drizzle-orm/mysql
 export const rooms = mysqlTable("rooms", {
   id: varchar("id", { length: 16 }).primaryKey(), // NanoID
   ownerId: varchar("owner_id", { length: 36 }).notNull(), // Sender ID of room creator
+  secretKey: varchar("secret_key", { length: 64 }), // Optional secret key mapping for resilient join
   expiresAt: timestamp("expires_at").notNull(),
   isBackedUp: boolean("is_backed_up").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

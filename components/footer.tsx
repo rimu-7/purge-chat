@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { Terminal, Shield, Lock, Clock } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { Terminal } from "lucide-react"
 
 export function Footer() {
   return (
